@@ -1,56 +1,63 @@
 import cv2
-import threading
+import deepface
 
-from deepface import DeepFace
+# Load the face reference image
+reference_image_path = "path/to/your/reference_image.jpg"
+reference_image = cv2.imread("FaceReference.jpg.jpg")
 
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+# Load the pre-trained face recognition model (optional)
+model_name = "VGG-Face"  # You can choose other models like "FaceNet", "ArcFace", etc.
+model = deepface.load_model(model_name)
 
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+# Define the face detection cascade classifier
+face_cascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
+# Capture video from webcam (or provide a video path)
+cap = cv2.VideoCapture(0)  # 0 for webcam, replace with video path if using a video
 
+while True:
+    ret, frame = cap.read()
 
-reference_image = cv2.imread("FaceReference.jpg")
+    # Convert frame to grayscale for face detection
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+    # Detect faces
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-def check_face(frame):
-    global face_match
-    try:
-        if DeepFace.verify(frame,reference_image.copy())['verified']:
-            face_match = True
+    for (x, y, w, h) in faces:
+        # Extract the face region
+        face_region = frame[y:y + h, x:x + w]
+
+        # Resize the face region for model compatibility
+        resized_face = cv2.resize(face_region, (152, 152))
+
+        # Perform face recognition
+        result = deepface.verify(
+            img1_path=reference_image_path,
+            img2_path=resized_face,
+            model_name=model_name,
+            detector=cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+        )
+
+        # Draw bounding box and label
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        if result["verified"]:
+            cv2.putText(
+                frame, f"Recognized: {result['identity']}", (x + 10, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2
+            )
         else:
-            face_match = False
+            cv2.putText(
+                frame, f"Unknown", (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                (0, 0, 255), 2
+            )
 
-    except ValueError:
-        face_match = False
+    # Display the frame with bounding boxes and labels
+    cv2.imshow("Face Recognition", frame)
 
+    # Exit on 'q' key press
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
 
-
-
-def destroy_windows():
-    cv2.destroyAllWindows()
-
-def main():
-    counter = 0
-    face_match = False
-    while True:
-        return_value, frame = cap.read()
-
-        if return_value:
-            if counter % 30 == 0:
-                try:
-                    threading.Thread(target=check_face, args=(frame.copy(),)).start()
-
-                except ValueError:
-                    pass
-            counter += 1
-            if face_match:
-                cv2.putText(frame, "MATCH", (20, 450), cv2.FONT_HERSHEY_SIMPLEX, 2, (49, 205, 49), 3)
-            else:
-                cv2.putText(frame, "No MATCH", (20, 450), cv2.FONT_HERSHEY_SIMPLEX, 2, (22, 0, 201), 3)
-
-            cv2.imshow("Video", frame)
-
-        key = cv2.waitKey(1)
-        if key == ord("q"):
-             break
+cap.release()
+cv2.destroyAllWindows()
